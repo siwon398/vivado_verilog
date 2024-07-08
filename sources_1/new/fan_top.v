@@ -1,408 +1,63 @@
 `timescale 1ns / 1ps
+//////////////////////////////////////////////////////////////////////////////////
+// Company: 
+// Engineer: 
+// 
+// Create Date: 2024/06/15 15:21:53
+// Design Name: 
+// Module Name: multi_fan_top
+// Project Name: 
+// Target Devices: 
+// Tool Versions: 
+// Description: 
+// 
+// Dependencies: 
+// 
+// Revision:
+// Revision 0.01 - File Created
+// Additional Comments:
+// 
+//////////////////////////////////////////////////////////////////////////////////
 
-module fan_top(
-    input clk, reset_p, 
-    input [3:0]btn,
+module multi_fan_top(
+    input clk, reset_p,
+    input [3:0]btn, // LED ë°ê¸°, ë°”ëŒ ì„¸ê¸°, íƒ€ì´ë¨¸ ë²„íŠ¼ìœ¼ë¡œ 3ê°œ
     input echo,
+    output led_pwm_o, motor_pwm_o,//LED ë°ê¸°, ëª¨í„°ì˜ output
+    output [3:0]com,
+    output [7:0]seg_7,
+    output [2:0]motor_led,timer_led,
     output trigger,
-    output [3:0] com,
-    output [7:0] seg_7,
-    output motor_pwm,
-    output light_pwm,
-    output [2:0]led_power,
-    output [2:0] led_timer
+    output sg90
     );
-    wire [16:0] value;
-    wire btn_nedge;   
-    wire [3:0] btn_pedge;
-    button_cntr btn_cntr0(.clk(clk), .reset_p(reset_p), .btn(btn[0]), .btn_pe(btn_pedge[0]));   //ÆÄ¿ö
-    button_cntr btn_cntr1(.clk(clk), .reset_p(reset_p), .btn(btn[1]), .btn_ne(btn_nedge), .btn_pe(btn_pedge[1]));   //Å¸ÀÌ¸Ó
-    button_cntr btn_cntr2(.clk(clk), .reset_p(reset_p), .btn(btn[2]), .btn_pe(btn_pedge[2]));
+    wire [11:0] distance;
+    wire motor_off, motor_sw;
     
+    led_brightness(.clk(clk), //LEDë°ê¸° ëª¨ë“ˆ
+                   .reset_p(reset_p),
+                   .btn(btn[0]),
+                   .led_pwm_o(led_pwm_o)); //JA1
+               
+    dc_motor_speed(.clk(clk), //ëª¨í„° ìŠ¤í”¼ë“œ ëª¨ë“ˆ
+                   .reset_p(reset_p),
+                   .motor_off(motor_off),
+                   .distance(distance),
+                   .btn(btn[1]),
+                   .motor_pwm_o(motor_pwm_o),
+                   .motor_led(motor_led),
+                   .motor_sw(motor_sw)); //JA2
     
-    /* Å¸ÀÌ¸Ó ¸ğµâ*/ 
-    cook_timer_fan cook(clk, reset_p, btn_nedge, btn_pedge[1], value, led_timer);
-    fnd_4digit_cntr fnd(.clk(clk), .reset_p(reset_p), .value(value[16:1]), .seg_7_ca(seg_7), .com(com));
-   
-    /*Á¶¸í¸ğµâ*/
-    wire [7:0] light;
-    counter_pwm fan_light(.clk(clk), .reset_p(reset_p), .btn_pedge(btn_pedge[2]), .power(light));
-    pwm_128step_fan pwm_light(.clk(clk), .reset_p(reset_p), .duty(light), .pwm_freq(100), .pwm_128(light_pwm));
+    fan_timer( .clk(clk), 
+               .reset_p(reset_p),
+               .motor_sw(motor_sw), 
+               .btn_str(btn[2]), 
+               .motor_off(motor_off),
+               .timer_led(timer_led),
+               .com(com),
+               .seg_7(seg_7)); 
     
-    /*ÆÄ¿ö ¸ğµâ*/
-    wire [7:0] power_fan;
-    wire [7:0]power_timer;  //timer = 0ÀÏ¶§ off
-    counter_pwm fan_power(.clk(clk), .reset_p(reset_p), .btn_pedge(btn_pedge[0]), .power(power_fan), .led(led_power));         
-    pwm_128step_fan pwm_motor(.clk(clk), .reset_p(reset_p), .duty(power_timer), .pwm_freq(100), .pwm_128(motor_pwm));               
+    ultra_sonic_prof_fan ult(clk, reset_p, echo, trigger, distance);
     
-    assign power_timer = value ? power_fan : 0; //timer = 0ÀÏ¶§ off
-
-//    always @(posedge clk or posedge reset_p) begin
-//        if(reset_p) begin
-        
-//        end
-//        else if (~btn_nedge) begin
-        
-//        end
-//        else if (btn_nedge) begin
-            
-//        end
-//    end    
-
-
-
-
-    
-//    wire [11:0] distance;
-//    wire [11:0] distance_sw;
-//    ultra_sonic_prof ult(clk, reset_p, echo, trigger, distance, led_bar);
-    
-//    assign power_timer = (11'h1a<=distance) ? 0 : power_fan;
-//      //distance¿¡ value
-   
- endmodule     
-
-
-//////////////////////////////////////////////////////////////////////
-module dht11_top_fan(
-    input clk, reset_p,
-    inout dht11_data,
-    output [3:0] com,
-    output [7:0] seg_7
-    );
-    
-    wire [7:0] humidity, temperature;
-    dht11 dht(clk, reset_p, dht11_data, humidity, temperature);
-    wire [15:0] bcd_humi, bcd_tmpr;
-    bin_to_dec humi(.bin({4'b0000,humidity}), .bcd(bcd_humi));
-    bin_to_dec tmpr(.bin({4'b0000, temperature}), .bcd(bcd_tmpr));
-    
-    wire [15:0] value;
-    assign value = {bcd_humi[7:0], bcd_tmpr[7:0]};
-    
-    fnd_4digit_cntr fnd(.clk(clk), .reset_p(reset_p), .value(value), .seg_7_ca(seg_7), .com(com));
-    
-endmodule
-///////////////////////////////////////////////////////////////////
-module i2c_txtlcd_top_fan(
-    input clk, reset_p,
-    input [3:0]btn,
-    output scl, sda);
-
-    parameter IDLE          = 6'b00_0001;    // pushed btn waiting
-    parameter INIT          = 6'b00_0010;    // text initial in lcd
-    parameter SEND          = 6'b00_0100;    // 'A'
-    parameter MOVE_CURSOR   = 6'b00_1000;
-    parameter SHIFT_DISPLAY = 6'b01_0000;
-    parameter SAMPLE_DATA = "A";    // " "´Â verilog¿¡¼­ 'ascii code'·Î º¯È¯µÇ¼­ Ãâ·Â
-    parameter word_T = "T";
-    parameter word_E = "E";
-    parameter word_M = "M";
-    parameter word_P = "P";
-    parameter word_dot = ":";
-    parameter word_H = "H";
-    parameter word_U = "U";
-    parameter word_I = "I";
-    parameter word_D = "D";
-    
-    reg [7:0] send_buffer; // lcd send byte
-    reg send_e, rs;
-    wire busy;  // ÀĞ¾î¾ßÇÏ´Â °Í
-
-    i2c_lcd_send_byte send_byte(.clk(clk), .reset_p(reset_p),
-        .addr(7'h27), .send_buffer(send_buffer), 
-        .send(send_e), .rs(rs),
-        .scl(scl), .sda(sda), .busy(busy));
-       
-    reg [21:0] count_usec;
-    reg count_usec_e;
-    wire clk_usec;
-    clock_usec usec_clk (clk, reset_p, clk_usec);
-
-    always @(negedge clk or posedge reset_p)begin
-        if(reset_p)begin
-            count_usec = 0;
-        end
-        else begin
-            if(clk_usec && count_usec_e) count_usec = count_usec + 1;
-            else if(!count_usec_e) count_usec = 0;
-        end
-    end
-    
-    reg [5:0] state, next_state; // state change(ÃµÀÌ?)
-    always @(negedge clk or posedge reset_p)begin
-        if(reset_p) state = IDLE;
-        else state = next_state;
-    end
-   
-    wire [2:0]btn_pedge;   // btn cntr & controller
-    button_cntr btn_cntr0(.clk(clk), .reset_p(reset_p), 
-        .btn(btn[0]), .btn_pe(btn_pedge[0]));
-     
-     
-    reg init_flag;  /// ÃÊ±âÈ­ µÆ´ÂÁö È®ÀÎ(flag)
-    reg [3:0] cnt_data;
-    always @(posedge clk or posedge reset_p)begin
-        if(reset_p)begin
-            next_state = IDLE;
-            send_buffer = 0;     //4bit data(our)
-            send_e = 0;          //lcd enable
-            rs = 0;              //register select
-            init_flag = 0;
-            cnt_data =0;
-        end
-        else begin
-            case(state)
-                IDLE: begin  // ½Ã½ºÅÛ ½ÃÀÛ ½Ã text ÃÊ±âÈ­ È®ÀÎ(µÆ´ÂÁö) & btn wait(valid)
-                    if(init_flag)begin      // (4) init state¿¡¼­ 1
-                        if(btn_pedge[0])next_state = SEND;
-                                    
-                    end
-                    else begin
-                        if(count_usec <= 22'd80_000)begin   // (1) init_flag = 0
-                            count_usec_e = 1;   //*         //     init Àü count
-                        end
-                        else begin          // (2) 40ms ÈÄ next_state = init
-                            next_state = INIT;
-                            count_usec_e = 0;
-                        end     
-                    end
-                end 
-                INIT: begin     // (3) Init : init_flag = 1
-                    if(count_usec <= 22'd1000)begin // 1ms
-                        send_buffer = 8'h33;
-                        send_e = 1;
-                        count_usec_e = 1;
-                    end
-                    else if(count_usec <= 22'd1010) send_e = 0;   // send_e = 0À» À§ÇÑ for 10us
-                    else if(count_usec <= 22'd2010)begin
-                        send_buffer = 8'h32;
-                        send_e = 1;
-                        count_usec_e = 1;
-                    end
-                    else if(count_usec <= 22'd2020) send_e = 0;
-                    else if(count_usec <= 22'd3020)begin
-                        send_buffer = 8'h28;
-                        send_e = 1;
-                        count_usec_e = 1;
-                    end
-                    else if(count_usec <= 22'd3030) send_e = 0;
-                    else if(count_usec <= 22'd4030)begin
-                        send_buffer = 8'h0e;    // 08Àº off
-                        send_e = 1;
-                        count_usec_e = 1;
-                    end
-                    else if(count_usec <= 22'd4040) send_e = 0;
-                    else if(count_usec <= 22'd5040)begin
-                        send_buffer = 8'h01;
-                        send_e = 1;
-                        count_usec_e = 1;
-                    end
-                    else if(count_usec <= 22'd5050) send_e = 0;
-                    else if(count_usec <= 22'd6050)begin
-                        send_buffer = 8'h06;   
-                        send_e = 1;
-                        count_usec_e = 1;
-                    end
-                    else if(count_usec <= 22'd6060) send_e = 0;
-                    else begin
-                        next_state = IDLE;
-                        init_flag = 1;
-                        count_usec_e = 0;
-                    end
-                end
-                SEND: begin
-                    if (count_usec <= 22'd1000) begin  
-                         send_buffer = word_H;
-                         rs = 1;
-                         send_e = 1;
-                         count_usec_e = 1;
-                    end
-                    else if(count_usec <= 22'd1010) send_e = 0;   // send_e = 0À» À§ÇÑ for 10us
-                    else if(count_usec <= 22'd2010)begin
-                        send_buffer = word_M;
-                        rs = 1;
-                        send_e = 1;
-                        count_usec_e = 1;
-                    end
-                    else if(count_usec <= 22'd2020) send_e = 0;
-                    else if(count_usec <= 22'd3020)begin
-                        send_buffer = word_H;
-                        send_e = 1;
-                        count_usec_e = 1;
-                    end
-                    else if(count_usec <= 22'd3030) send_e = 0;
-                    else if(count_usec <= 22'd4030)begin
-                        send_buffer = word_P;
-                        send_e = 1;
-                        count_usec_e = 1;
-                    end   
-                    else if(count_usec <= 22'd4040) send_e = 0;
-                    else if(count_usec <= 22'd5040)begin
-                        send_buffer = 8'hc0;
-                        send_e = 1;
-                        count_usec_e = 1;
-                    end
-                    else if(count_usec <= 22'd5050)begin
-                        send_buffer = word_H;
-                        send_e = 1;
-                        count_usec_e = 1;
-                    end                            
-                 end
-                
-            endcase
-        end
-    end
-endmodule
-//////////////////////////////////////////////////////////////////
-module i2c_txtlcd_top_1(
-    input clk, reset_p,
-    input [3:0]btn,
-    output scl, sda);
-
-    parameter IDLE          = 10'b00_0000_0001;    // pushed btn waiting
-    parameter INIT          = 10'b00_0000_0010;    // text initial in lcd
-    parameter SEND          = 10'b00_0000_0100;    // 'A'
-    parameter MOVE_CURSOR   = 10'b00_0000_1000;
-    parameter SHIFT_DISPLAY = 10'b00_0001_0000;
-    parameter SAMPLE_DATA = "A";
-    parameter word_M = "M";
-    parameter ONE           = 10'b00_0010_0000;
-    parameter TWO           = 10'b00_0100_0000;
-    parameter THREE         = 10'b00_1000_0000;
-    parameter FOUR          = 10'b01_0000_0000;
-   
-    
-        // " "´Â verilog¿¡¼­ 'ascii code'·Î º¯È¯µÇ¼­ Ãâ·Â
-    
-    reg [7:0] send_buffer; // lcd send byte
-    reg send_e, rs;
-    wire busy;  // ÀĞ¾î¾ßÇÏ´Â °Í
-
-    i2c_lcd_send_byte send_byte(.clk(clk), .reset_p(reset_p),
-        .addr(7'h27), .send_buffer(send_buffer), 
-        .send(send_e), .rs(rs),
-        .scl(scl), .sda(sda), .busy(busy));
-       
-    reg [21:0] count_usec;
-    reg count_usec_e;
-    wire clk_usec;
-    clock_usec usec_clk (clk, reset_p, clk_usec);
-
-    always @(negedge clk or posedge reset_p)begin
-        if(reset_p)begin
-            count_usec = 0;
-        end
-        else begin
-            if(clk_usec && count_usec_e) count_usec = count_usec + 1;
-            else if(!count_usec_e) count_usec = 0;
-        end
-    end
-    
-    reg [5:0] state, next_state; // state change(ÃµÀÌ?)
-    always @(negedge clk or posedge reset_p)begin
-        if(reset_p) state = IDLE;
-        else state = next_state;
-    end
-   
-    wire [2:0]btn_pedge;   // btn cntr & controller
-    button_cntr btn_cntr0(.clk(clk), .reset_p(reset_p), 
-        .btn(btn[0]), .btn_pe(btn_pedge[0]), .btn_ne(btn_nedge));
-    button_cntr btn_cntr1(.clk(clk), .reset_p(reset_p), 
-            .btn(btn[1]), .btn_pe(btn_pedge[1]), .btn_ne(btn_nedge));
-    button_cntr btn_cntr2(.clk(clk), .reset_p(reset_p), 
-            .btn(btn[2]), .btn_pe(btn_pedge[2]), .btn_ne(btn_nedge));  
-     
-    reg init_flag;  /// ÃÊ±âÈ­ µÆ´ÂÁö È®ÀÎ(flag)
-    reg [3:0] cnt_data;
-    always @(posedge clk or posedge reset_p)begin
-        if(reset_p)begin
-            next_state = IDLE;
-            send_buffer = 0;     //4bit data(our)
-            send_e = 0;          //lcd enable
-            rs = 0;              //register select
-            init_flag = 0;
-            cnt_data =0;
-        end
-        else begin
-            case(state)
-                IDLE: begin  // ½Ã½ºÅÛ ½ÃÀÛ ½Ã text ÃÊ±âÈ­ È®ÀÎ(µÆ´ÂÁö) & btn wait(valid)
-                    if(init_flag)begin      // (4) init state¿¡¼­ 1
-                        if(btn_pedge[0])next_state = SEND;
-                                    
-                    end
-                    else begin
-                        if(count_usec <= 22'd80_000)begin   // (1) init_flag = 0
-                            count_usec_e = 1;   //*         //     init Àü count
-                        end
-                        else begin          // (2) 40ms ÈÄ next_state = init
-                            next_state = INIT;
-                            count_usec_e = 0;
-                        end     
-                    end
-                end 
-                INIT: begin     // (3) Init : init_flag = 1
-                    if(count_usec <= 22'd1000)begin // 1ms
-                        send_buffer = 8'h33;
-                        send_e = 1;
-                        count_usec_e = 1;
-                    end
-                    else if(count_usec <= 22'd1010) send_e = 0;   // send_e = 0À» À§ÇÑ for 10us
-                    else if(count_usec <= 22'd2010)begin
-                        send_buffer = 8'h32;
-                        send_e = 1;
-                        count_usec_e = 1;
-                    end
-                    else if(count_usec <= 22'd2020) send_e = 0;
-                    else if(count_usec <= 22'd3020)begin
-                        send_buffer = 8'h28;
-                        send_e = 1;
-                        count_usec_e = 1;
-                    end
-                    else if(count_usec <= 22'd3030) send_e = 0;
-                    else if(count_usec <= 22'd4030)begin
-                        send_buffer = 8'h0e;    // 08Àº off
-                        send_e = 1;
-                        count_usec_e = 1;
-                    end
-                    else if(count_usec <= 22'd4040) send_e = 0;
-                    else if(count_usec <= 22'd5040)begin
-                        send_buffer = 8'h01;
-                        send_e = 1;
-                        count_usec_e = 1;
-                    end
-                    else if(count_usec <= 22'd5050) send_e = 0;
-                    else if(count_usec <= 22'd6050)begin
-                        send_buffer = 8'h06;   
-                        send_e = 1;
-                        count_usec_e = 1;
-                    end
-                    else if(count_usec <= 22'd6060) send_e = 0;
-                    else begin
-                        next_state = IDLE;
-                        init_flag = 1;
-                        count_usec_e = 0;
-                    end
-                end
-                SEND: begin                                      
-                    
-                         send_buffer = SAMPLE_DATA;  
-                         rs = 1;
-                         send_e = 1;
-                         next_state = ONE;
-                        end                            
-                  ONE : begin
-                       
-                         rs = 1;
-                         send_e = 0;
-                         next_state = TWO;
-                 end               
-                  TWO : begin
-                        send_buffer = SAMPLE_DATA;  
-                         rs = 1;
-                         send_e = 1;
-                    end
-            endcase
-        end
-    end
+    servomotor servo(.clk(clk), .reset_p(reset_p), .btn_str(btn[3]), .motor_sw(motor_sw), .sg90(sg90));
+           
 endmodule
