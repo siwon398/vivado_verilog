@@ -1,4 +1,124 @@
 `timescale 1ns / 1ps
+module stepmotor(
+    input clk, reset_p,
+    input [2:0] btn,
+    output reg [3:0] motorpin
+);
+    parameter STEP_PER_REVOLUTION = 4096;
+    parameter DEGREE_ONE = 1030;
+    parameter DEGREE_TWO = 2060;
+
+    reg [2:0] step;
+    reg [15:0] step_counter;
+    reg [23:0] delay_counter;  // Assuming a certain clock frequency, e.g., 50MHz for 800us delay
+    reg step_active = 0;
+    reg direction; 
+    reg [1:0] current_floor; // 0:1ì¸µ, 1:2ì¸µ, 2:3ì¸µ
+    
+    wire [2:0] btn_pedge;
+    reg [15:0] action_steps;
+    wire btn_en0,btn_en1,btn_en2;
+    
+    button_cntr btn_cntr0(.clk(clk), .reset_p(reset_p), .btn(btn_en0), .btn_pe(btn_pedge[0]));
+    button_cntr btn_cntr1(.clk(clk), .reset_p(reset_p), .btn(btn_en1), .btn_pe(btn_pedge[1]));
+    button_cntr btn_cntr2(.clk(clk), .reset_p(reset_p), .btn(btn_en2), .btn_pe(btn_pedge[2]));
+    
+    
+    
+    always @(posedge clk or posedge reset_p) begin
+        if (reset_p) begin
+            step <= 3'd0;
+            step_counter <= 0;
+            delay_counter <= 0;
+            step_active <= 0;
+            direction <= 0;
+            current_floor <= 2'd0;
+        end 
+        else begin
+        if(btn_pedge[0] && current_floor == 2'd1) begin  // 2ì¸µì—ì„œ 1ì¸µìœ¼ë¡œ
+                step_active <= 1;
+                direction <= 1;
+                action_steps <= (DEGREE_ONE * STEP_PER_REVOLUTION) / 360;
+                current_floor <= 2'd0;
+            end
+            else if(btn_pedge[1] && current_floor == 2'd0) begin  // 1ì¸µì—ì„œ 2ì¸µìœ¼ë¡œ
+                step_active <= 1;
+                direction <= 0;
+                action_steps <= (DEGREE_ONE * STEP_PER_REVOLUTION) / 360;
+                current_floor <= 2'd1;
+            end
+            else if(btn_pedge[2] && current_floor == 2'd1) begin  // 2ì¸µì—ì„œ 3ì¸µìœ¼ë¡œ
+                step_active <= 1;
+                direction <= 0;
+                action_steps <= (DEGREE_ONE * STEP_PER_REVOLUTION) / 360;
+                current_floor <= 2'd2;
+            end
+            else if(btn_pedge[1] && current_floor == 2'd2) begin  // 3ì¸µì—ì„œ 2ì¸µìœ¼ë¡œ
+                step_active <= 1;
+                direction <= 1;
+                action_steps <= (DEGREE_ONE * STEP_PER_REVOLUTION) / 360;
+                current_floor <= 2'd1;
+            end
+            else if(btn_pedge[2] && current_floor == 2'd0) begin  // 1ì¸µì—ì„œ 3ì¸µìœ¼ë¡œ
+                step_active <= 1;
+                direction <= 0;
+                action_steps <= (DEGREE_TWO * STEP_PER_REVOLUTION) / 360;
+                current_floor <= 2'd2;
+            end
+            else if(btn_pedge[0] && current_floor == 2'd2) begin  // 3ì¸µì—ì„œ 1ì¸µìœ¼ë¡œ
+                step_active <= 1;
+                direction <= 1;
+                action_steps <= (DEGREE_TWO * STEP_PER_REVOLUTION) / 360;
+                current_floor <= 2'd0;
+            end
+            
+            if(step_active)begin
+                if (delay_counter < 24'd75000)begin
+                    delay_counter <= delay_counter + 1; // 800us
+                end
+                else begin
+                    delay_counter <= 24'd0;
+                    if(step_counter < action_steps)begin
+                        if(direction == 0)begin
+                            step <= (step + 1) % 8;
+                        end
+                        else begin
+                            step <= (step - 1) % 8;
+                        end
+                        step_counter <= step_counter + 1;
+                    end
+                    else begin  
+                        step_active <= 0;
+                        step_counter <= 0;
+                    end
+                end 
+            end
+        end
+    end
+    
+    always @(posedge clk)begin
+        if(reset_p) begin
+            motorpin <= 4'b0000;
+        end
+        else begin
+            case (step)
+                3'd0: motorpin <= 4'b1000;
+                3'd1: motorpin <= 4'b1100;
+                3'd2: motorpin <= 4'b0100;
+                3'd3: motorpin <= 4'b0110;
+                3'd4: motorpin <= 4'b0010;
+                3'd5: motorpin <= 4'b0011;
+                3'd6: motorpin <= 4'b0001;
+                3'd7: motorpin <= 4'b1001;
+                default: motorpin <= 4'b0000;
+            endcase
+        end
+    end
+    assign btn_en0 = step_active ? 0 : btn[0];  //ë²„íŠ¼ ë¸”ë½
+    assign btn_en1 = step_active ? 0 : btn[1];
+    assign btn_en2 = step_active ? 0 : btn[2];
+endmodule
+
 //////////////////////////////////////////////////
 module elevator_sub(
     input clk, reset_p,
@@ -14,7 +134,7 @@ module elevator_sub(
     reg [23:0] delay_counter;  
     reg step_active;
     reg direction; 
-    reg [1:0] current_floor; // 0:1Ãþ, 1:2Ãþ, 2:3Ãþ
+    reg [1:0] current_floor; // 0:1ì¸µ, 1:2ì¸µ, 2:3ì¸µ
     
     wire [3:0] btn_pedge;
     reg [15:0] action_steps;
@@ -36,7 +156,7 @@ module elevator_sub(
             action_steps = 0;
             btn_val = 0;
         end 
-        else begin  ///¹öÆ° ¿§Áö ¼ö¸¸Å­ Ãß°¡ÇØ ÁÖ¸é ´ï
+        else begin  ///ë²„íŠ¼ ì—£ì§€ ìˆ˜ë§Œí¼ ì¶”ê°€í•´ ì£¼ë©´ ëŒ
             if (btn_pedge[0]) begin
                 btn_val = 2'd0;
             end 
@@ -51,7 +171,7 @@ module elevator_sub(
             end
         
         
-            if (btn_pedge[0] || btn_pedge[1] || btn_pedge[2] || btn_pedge[3]) begin//¹öÆ° ¿§Áö ¼ö¸¸Å­ Ãß°¡ÇØ ÁÖ¸é ´ï
+            if (btn_pedge[0] || btn_pedge[1] || btn_pedge[2] || btn_pedge[3]) begin//ë²„íŠ¼ ì—£ì§€ ìˆ˜ë§Œí¼ ì¶”ê°€í•´ ì£¼ë©´ ëŒ
                 if (btn_val != current_floor) begin
                     step_active = 1;
                     direction = ((btn_val > current_floor) ? 0 : 1);
@@ -108,125 +228,6 @@ module elevator_sub(
 endmodule
 
 //////////////////////////////////////////////////
-module stepmotor(
-    input clk, reset_p,
-    input [2:0] btn,
-    output reg [3:0] motorpin
-);
-    parameter STEP_PER_REVOLUTION = 4096;
-    parameter DEGREE_ONE = 1030;
-    parameter DEGREE_TWO = 2060;
-
-    reg [2:0] step;
-    reg [15:0] step_counter;
-    reg [23:0] delay_counter;  // Assuming a certain clock frequency, e.g., 50MHz for 800us delay
-    reg step_active = 0;
-    reg direction; 
-    reg [1:0] current_floor; // 0:1Ãþ, 1:2Ãþ, 2:3Ãþ
-    
-    wire [2:0] btn_pedge;
-    reg [15:0] action_steps;
-    wire btn_en0,btn_en1,btn_en2;
-    
-    button_cntr btn_cntr0(.clk(clk), .reset_p(reset_p), .btn(btn_en0), .btn_pe(btn_pedge[0]));
-    button_cntr btn_cntr1(.clk(clk), .reset_p(reset_p), .btn(btn_en1), .btn_pe(btn_pedge[1]));
-    button_cntr btn_cntr2(.clk(clk), .reset_p(reset_p), .btn(btn_en2), .btn_pe(btn_pedge[2]));
-    
-    
-    
-    always @(posedge clk or posedge reset_p) begin
-        if (reset_p) begin
-            step <= 3'd0;
-            step_counter <= 0;
-            delay_counter <= 0;
-            step_active <= 0;
-            direction <= 0;
-            current_floor <= 2'd0;
-        end 
-        else begin
-        if(btn_pedge[0] && current_floor == 2'd1) begin  // 2Ãþ¿¡¼­ 1ÃþÀ¸·Î
-                step_active <= 1;
-                direction <= 1;
-                action_steps <= (DEGREE_ONE * STEP_PER_REVOLUTION) / 360;
-                current_floor <= 2'd0;
-            end
-            else if(btn_pedge[1] && current_floor == 2'd0) begin  // 1Ãþ¿¡¼­ 2ÃþÀ¸·Î
-                step_active <= 1;
-                direction <= 0;
-                action_steps <= (DEGREE_ONE * STEP_PER_REVOLUTION) / 360;
-                current_floor <= 2'd1;
-            end
-            else if(btn_pedge[2] && current_floor == 2'd1) begin  // 2Ãþ¿¡¼­ 3ÃþÀ¸·Î
-                step_active <= 1;
-                direction <= 0;
-                action_steps <= (DEGREE_ONE * STEP_PER_REVOLUTION) / 360;
-                current_floor <= 2'd2;
-            end
-            else if(btn_pedge[1] && current_floor == 2'd2) begin  // 3Ãþ¿¡¼­ 2ÃþÀ¸·Î
-                step_active <= 1;
-                direction <= 1;
-                action_steps <= (DEGREE_ONE * STEP_PER_REVOLUTION) / 360;
-                current_floor <= 2'd1;
-            end
-            else if(btn_pedge[2] && current_floor == 2'd0) begin  // 1Ãþ¿¡¼­ 3ÃþÀ¸·Î
-                step_active <= 1;
-                direction <= 0;
-                action_steps <= (DEGREE_TWO * STEP_PER_REVOLUTION) / 360;
-                current_floor <= 2'd2;
-            end
-            else if(btn_pedge[0] && current_floor == 2'd2) begin  // 3Ãþ¿¡¼­ 1ÃþÀ¸·Î
-                step_active <= 1;
-                direction <= 1;
-                action_steps <= (DEGREE_TWO * STEP_PER_REVOLUTION) / 360;
-                current_floor <= 2'd0;
-            end
-            
-            if(step_active)begin
-                if (delay_counter < 24'd75000)begin
-                    delay_counter <= delay_counter + 1; // 800us
-                end
-                else begin
-                    delay_counter <= 24'd0;
-                    if(step_counter < action_steps)begin
-                        if(direction == 0)begin
-                            step <= (step + 1) % 8;
-                        end
-                        else begin
-                            step <= (step - 1) % 8;
-                        end
-                        step_counter <= step_counter + 1;
-                    end
-                    else begin  
-                        step_active <= 0;
-                        step_counter <= 0;
-                    end
-                end 
-            end
-        end
-    end
-    
-    always @(posedge clk)begin
-        if(reset_p) begin
-            motorpin <= 4'b0000;
-        end
-        else begin
-            case (step)
-                3'd0: motorpin <= 4'b1000;
-                3'd1: motorpin <= 4'b1100;
-                3'd2: motorpin <= 4'b0100;
-                3'd3: motorpin <= 4'b0110;
-                3'd4: motorpin <= 4'b0010;
-                3'd5: motorpin <= 4'b0011;
-                3'd6: motorpin <= 4'b0001;
-                3'd7: motorpin <= 4'b1001;
-                default: motorpin <= 4'b0000;
-            endcase
-        end
-    end
-    assign btn_en0 = step_active ? 0 : btn[0];  //¹öÆ° ºí¶ô
-    assign btn_en1 = step_active ? 0 : btn[1];
-    assign btn_en2 = step_active ? 0 : btn[2];
-endmodule
 
 /////////////////////////////////////////////////
 
@@ -280,7 +281,7 @@ module elevator_top(
                 en_up = 0;
                 en_down = 1;
                 
-                 // en_down ºñÈ°¼ºÈ­
+                 // en_down ë¹„í™œì„±í™”
             end    
         end
        
@@ -300,7 +301,7 @@ module elevator_top(
         .motorpin(motorpin_down)
     );
 
-    // motorpinÀÇ ´ÙÁßÈ­ ³í¸® Ãß°¡
+    // motorpinì˜ ë‹¤ì¤‘í™” ë…¼ë¦¬ ì¶”ê°€
     assign motorpin = en_up ? motorpin_up : en_down ? motorpin_down : 4'b0000;
 
 endmodule
